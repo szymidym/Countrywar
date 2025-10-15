@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Prosty prototyp — gra planszowa turowa</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial}
+    body{display:flex;flex-direction:column;align-items:center;gap:12px;padding:18px;background:#f3f3f3}
+    h1{margin:0;font-size:20px}
+    #boardCanvas{background:#ddd;box-shadow:0 6px 18px rgba(0,0,0,0.12);border-radius:6px}
+    .controls{display:flex;gap:8px;align-items:center}
+    button{padding:8px 12px;border-radius:6px;border:1px solid #bbb;background:white;cursor:pointer}
+    .info{background:#fff;padding:8px;border-radius:6px;border:1px solid #e0e0e0;max-width:720px}
+    .legend{display:flex;gap:12px;align-items:center}
+    .legend .box{width:18px;height:18px;border:1px solid #999;display:inline-block}
+    label{display:flex;gap:6px;align-items:center}
+    input[type=number]{width:70px}
+    small{color:#555}
+  </style>
+</head>
+<body>
+  <h1>Prosty prototyp gry planszowej (przeglądarka, tury)</h1>
+
+  <div class="controls">
+    <button id="newBtn">Nowa gra</button>
+    <button id="endTurnBtn">Zakończ turę</button>
+    <label>Rozmiar planszy: <input id="sizeInput" type="number" min="6" max="60" value="20"></label>
+    <label>Gracze: <input id="playersInput" type="number" min="2" max="6" value="2"></label>
+  </div>
+
+  <canvas id="boardCanvas" width="600" height="600"></canvas>
+
+  <div class="info">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div>Aktualny gracz: <strong id="currentPlayer">1</strong></div>
+        <div>Wybrana komórka: <span id="selectedCell">brak</span></div>
+      </div>
+      <div class="legend">
+        <div><span class="box" style="background:#333"></span> Gracz 1</div>
+        <div><span class="box" style="background:#fff;border:1px solid #333"></span> Gracz 2</div>
+        <div><span class="box" style="background:#bbb"></span> Neutralne</div>
+      </div>
+    </div>
+    <hr>
+    <div>
+      <p><strong>Zasady prostego prototypu:</strong></p>
+      <ul>
+        <li>Gra jest turowa. Każdy gracz wykonuje po 1 akcji, potem klika <em>Zakończ turę</em> lub wykonuje kolejną akcję (możesz grać dowolną liczbę akcji — to prototyp).</li>
+        <li>Kliknij na własną komórkę, aby ją zaznaczyć. Następnie kliknij sąsiednią komórkę, by <em>atakować/przemieszczać</em>.</li>
+        <li>Jeśli siła atakującego (liczba żołnierzy) &gt; siły obrońcy, pole zostaje przejęte; nadmiar żołnierzy zostaje na nowym polu. W przeciwnym razie atak się nie udaje (obrońca traci tyle jednostek, ile miał atakujący).</li>
+        <li>Kliknij dwukrotnie własne pole, by rozdzielić (zwiększyć liczbę żołnierzy o 1) — to prosty "rekrut" (na kartce robiłeś coś podobnego).</li>
+      </ul>
+    </div>
+    <small>To prosty, czarno-biały prototyp na kartce — możemy dodać punkty produkcji, ruchy, AI i grafikę później.</small>
+  </div>
+
+  <script>
+    // Prosty prototyp planszy turowej
+    const canvas = document.getElementById('boardCanvas');
+    const ctx = canvas.getContext('2d');
+    const newBtn = document.getElementById('newBtn');
+    const endTurnBtn = document.getElementById('endTurnBtn');
+    const currentPlayerEl = document.getElementById('currentPlayer');
+    const selectedCellEl = document.getElementById('selectedCell');
+    const sizeInput = document.getElementById('sizeInput');
+    const playersInput = document.getElementById('playersInput');
+
+    let size = parseInt(sizeInput.value,10); // number of cells per side
+    let players = parseInt(playersInput.value,10);
+
+    let grid = []; // each cell: {owner: 0..players (0=neutral), troops: int}
+    let cellSize = canvas.width / size;
+    let currentPlayer = 1;
+    let selected = null; // [r,c]
+
+    function makeEmptyGrid(n){
+      const g = [];
+      for(let r=0;r<n;r++){
+        const row = [];
+        for(let c=0;c<n;c++) row.push({owner:0,troops:0});
+        g.push(row);
+      }
+      return g;
+    }
+
+    function placeStartingBases(){
+      // place one base per player near corners
+      const corners = [[0,0],[0,size-1],[size-1,0],[size-1,size-1],[0,Math.floor(size/2)],[Math.floor(size/2),0]];
+      for(let p=1;p<=players;p++){
+        const [r,c] = corners[p-1] || [Math.floor(Math.random()*size),Math.floor(Math.random()*size)];
+        grid[r][c].owner = p;
+        grid[r][c].troops = 3; // starting troops
+      }
+    }
+
+    function draw(){
+      cellSize = canvas.width / size;
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      for(let r=0;r<size;r++){
+        for(let c=0;c<size;c++){
+          const cell = grid[r][c];
+          const x = c*cellSize, y = r*cellSize;
+          // color
+          if(cell.owner===0){
+            ctx.fillStyle = '#bbb';
+            ctx.fillRect(x,y,cellSize,cellSize);
+          } else if(cell.owner===1){
+            ctx.fillStyle = '#333';
+            ctx.fillRect(x,y,cellSize,cellSize);
+          } else if(cell.owner===2){
+            // white with border so visible
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(x,y,cellSize,cellSize);
+            ctx.strokeStyle = '#333';
+            ctx.strokeRect(x+0.5,y+0.5,cellSize-1,cellSize-1);
+          } else {
+            // other players: light gray shades
+            ctx.fillStyle = '#888';
+            ctx.fillRect(x,y,cellSize,cellSize);
+          }
+
+          // selection highlight
+          if(selected && selected[0]===r && selected[1]===c){
+            ctx.strokeStyle = 'rgba(255,0,0,0.9)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x+2,y+2,cellSize-4,cellSize-4);
+            ctx.lineWidth = 1;
+          }
+
+          // draw troops number
+          ctx.fillStyle = (cell.owner===1? '#fff' : '#000');
+          if(cell.owner===0) ctx.fillStyle = '#222';
+          ctx.font = Math.max(12,cellSize*0.35)+'px sans-serif';
+          ctx.textAlign='center';
+          ctx.textBaseline='middle';
+          if(cell.troops>0) ctx.fillText(cell.troops, x+cellSize/2, y+cellSize/2);
+
+          // grid lines
+          ctx.strokeStyle = '#9a9a9a';
+          ctx.strokeRect(x+0.5,y+0.5,cellSize-1,cellSize-1);
+        }
+      }
+      currentPlayerEl.textContent = currentPlayer;
+      selectedCellEl.textContent = selected ? selected.join(',') : 'brak';
+    }
+
+    function inBounds(r,c){return r>=0&&c>=0&&r<size&&c<size}
+
+    function neighbors(r,c){
+      return [[r-1,c],[r+1,c],[r,c-1],[r,c+1]].filter(([rr,cc])=>inBounds(rr,cc));
+    }
+
+    function canvasToCell(x,y){
+      const rect = canvas.getBoundingClientRect();
+      const cx = x - rect.left; const cy = y - rect.top;
+      const c = Math.floor(cx / cellSize); const r = Math.floor(cy / cellSize);
+      return [r,c];
+    }
+
+    canvas.addEventListener('click', (ev)=>{
+      const [r,c] = canvasToCell(ev.clientX, ev.clientY);
+      if(!inBounds(r,c)) return;
+      const cell = grid[r][c];
+
+      // if click on own cell -> select or quick recruit (double click simulated by two quick clicks?)
+      if(cell.owner === currentPlayer){
+        // if it's already selected -> recruit (add +1 troop)
+        if(selected && selected[0]===r && selected[1]===c){
+          cell.troops += 1; // recruit mechanic
+          draw();
+          return;
+        }
+        // else select
+        selected = [r,c];
+        draw();
+        return;
+      }
+
+      // if we have a selected own cell and click on neighbor -> attempt attack/move
+      if(selected){
+        const [sr,sc] = selected;
+        const src = grid[sr][sc];
+        // only adjacent moves allowed
+        const isNeighbor = neighbors(sr,sc).some(([nr,nc])=>nr===r && nc===c);
+        if(!isNeighbor){ selected = null; draw(); return; }
+        // cannot attack if no troops
+        if(src.troops<=0){ selected=null; draw(); return; }
+
+        // attack logic: attacker uses all troops except 1 must remain? For simplicity use all troops
+        const attackPower = src.troops;
+        const defPower = cell.troops;
+
+        if(attackPower > defPower){
+          // attacker wins, leftover troops go to captured cell
+          const leftover = attackPower - defPower;
+          grid[r][c].owner = currentPlayer;
+          grid[r][c].troops = leftover;
+          grid[sr][sc].troops = 0;
+        } else {
+          // defender survives, defender loses attackPower
+          grid[r][c].troops = Math.max(0, defPower - attackPower);
+          grid[sr][sc].troops = 0;
+          // ownership stays as was
+        }
+
+        selected = null;
+        draw();
+        return;
+      }
+    });
+
+    function nextPlayer(){
+      currentPlayer++;
+      if(currentPlayer>players) currentPlayer=1;
+      // simple passive income: each owned cell +1 troop at start of player's turn
+      for(let r=0;r<size;r++){
+        for(let c=0;c<size;c++){
+          if(grid[r][c].owner===currentPlayer) grid[r][c].troops += 1;
+        }
+      }
+      draw();
+    }
+
+    endTurnBtn.addEventListener('click', ()=>{
+      nextPlayer();
+    });
+
+    newBtn.addEventListener('click', ()=>{
+      size = parseInt(sizeInput.value,10)||20;
+      players = Math.max(2,Math.min(6,parseInt(playersInput.value,10)||2));
+      canvas.width = Math.min(800, Math.max(300, size*30));
+      canvas.height = canvas.width;
+      grid = makeEmptyGrid(size);
+      placeStartingBases();
+      currentPlayer = 1;
+      selected = null;
+      draw();
+    });
+
+    // initialize
+    grid = makeEmptyGrid(size);
+    placeStartingBases();
+    draw();
+
+    // keyboard shortcuts
+    window.addEventListener('keydown',(e)=>{
+      if(e.key==='n') newBtn.click();
+      if(e.key===' ') { e.preventDefault(); endTurnBtn.click(); }
+    });
+
+  </script>
+</body>
+</html>
