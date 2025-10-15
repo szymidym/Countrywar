@@ -3,33 +3,35 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Prosty prototyp — gra planszowa turowa</title>
+  <title>Wojny Świata – Strategia Turowa</title>
   <style>
     :root{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial}
     body{display:flex;flex-direction:column;align-items:center;gap:12px;padding:18px;background:#f3f3f3}
-    h1{margin:0;font-size:20px}
-    #boardCanvas{background:#ddd;box-shadow:0 6px 18px rgba(0,0,0,0.12);border-radius:6px}
+    h1{margin:0;font-size:22px}
+    #boardCanvas{background:#dde0f6;box-shadow:0 6px 18px rgba(0,0,0,0.12);border-radius:6px}
     .controls{display:flex;gap:8px;align-items:center}
     button{padding:8px 12px;border-radius:6px;border:1px solid #bbb;background:white;cursor:pointer}
-    .info{background:#fff;padding:8px;border-radius:6px;border:1px solid #e0e0e0;max-width:720px}
-    .legend{display:flex;gap:12px;align-items:center}
-    .legend .box{width:18px;height:18px;border:1px solid #999;display:inline-block}
+    .info{background:#fff;padding:8px 16px;border-radius:6px;border:1px solid #e0e0e0;max-width:720px}
+    .legend{display:flex;gap:14px;align-items:center}
+    .legend .box{width:20px;height:20px;border:1.5px solid #999;display:inline-block}
     label{display:flex;gap:6px;align-items:center}
     input[type=number]{width:70px}
-    small{color:#555}
+    small{color:#444}
+    .bank{font-weight:bold;margin-right:12px;}
+    .win{color:#008f00;font-weight:bold;font-size:19px}
   </style>
 </head>
 <body>
-  <h1>Prosty prototyp gry planszowej (przeglądarka, tury)</h1>
+  <h1>Wojny Świata – Strategia Turowa</h1>
 
   <div class="controls">
     <button id="newBtn">Nowa gra</button>
     <button id="endTurnBtn">Zakończ turę</button>
-    <label>Rozmiar planszy: <input id="sizeInput" type="number" min="6" max="60" value="20"></label>
-    <label>Gracze: <input id="playersInput" type="number" min="2" max="6" value="2"></label>
+    <span class="bank" id="bankInfo">Monety: 2</span>
+    <span id="gameMsg" class="win"></span>
   </div>
 
-  <canvas id="boardCanvas" width="600" height="600"></canvas>
+  <canvas id="boardCanvas" width="800" height="400"></canvas>
 
   <div class="info">
     <div style="display:flex;justify-content:space-between;align-items:center">
@@ -39,217 +41,266 @@
       </div>
       <div class="legend">
         <div><span class="box" style="background:#333"></span> Gracz 1</div>
-        <div><span class="box" style="background:#fff;border:1px solid #333"></span> Gracz 2</div>
-        <div><span class="box" style="background:#bbb"></span> Neutralne</div>
+        <div><span class="box" style="background:#c11"></span> Gracz 2</div>
+        <div><span class="box" style="background:#bbb"></span> Ocean / nieaktywne</div>
       </div>
     </div>
     <hr>
     <div>
-      <p><strong>Zasady prostego prototypu:</strong></p>
+      <strong>Zasady:</strong>
       <ul>
-        <li>Gra jest turowa. Każdy gracz wykonuje po 1 akcji, potem klika <em>Zakończ turę</em> lub wykonuje kolejną akcję (możesz grać dowolną liczbę akcji — to prototyp).</li>
-        <li>Kliknij na własną komórkę, aby ją zaznaczyć. Następnie kliknij sąsiednią komórkę, by <em>atakować/przemieszczać</em>.</li>
-        <li>Jeśli siła atakującego (liczba żołnierzy) &gt; siły obrońcy, pole zostaje przejęte; nadmiar żołnierzy zostaje na nowym polu. W przeciwnym razie atak się nie udaje (obrońca traci tyle jednostek, ile miał atakujący).</li>
-        <li>Kliknij dwukrotnie własne pole, by rozdzielić (zwiększyć liczbę żołnierzy o 1) — to prosty "rekrut" (na kartce robiłeś coś podobnego).</li>
+        <li>Każdy gracz zaczyna z bazą (Ameryka Płd. i Australia) – nie można jej zniszczyć, ale można przejąć.</li>
+        <li>Każda tura: +2 monety do portfela. Żołnierz kosztuje 1 monetę (kliknij na własną bazę lub pole, by rekrutować, jeśli masz monety).</li>
+        <li>Atak: Kliknij własne pole, potem sąsiadujące pole wroga lub neutralne (jeśli masz żołnierzy).</li>
+        <li>Atakujesz jeśli masz więcej żołnierzy niż obrona – przejmujesz pole. W przeciwnym razie żołnierze giną.</li>
+        <li>Wygrywasz, gdy przejmiesz bazę przeciwnika lub większość świata!</li>
       </ul>
+      <small>Uproszczona mapa świata, oceanów nie można atakować ani zajmować.<br>
+      Przykład dla 2 graczy, ale możesz zmienić kod na więcej.</small>
     </div>
-    <small>To prosty, czarno-biały prototyp na kartce — możemy dodać punkty produkcji, ruchy, AI i grafikę później.</small>
   </div>
 
-  <script>
-    // Prosty prototyp planszy turowej
-    const canvas = document.getElementById('boardCanvas');
-    const ctx = canvas.getContext('2d');
-    const newBtn = document.getElementById('newBtn');
-    const endTurnBtn = document.getElementById('endTurnBtn');
-    const currentPlayerEl = document.getElementById('currentPlayer');
-    const selectedCellEl = document.getElementById('selectedCell');
-    const sizeInput = document.getElementById('sizeInput');
-    const playersInput = document.getElementById('playersInput');
+<script>
+const canvas = document.getElementById('boardCanvas');
+const ctx = canvas.getContext('2d');
+const newBtn = document.getElementById('newBtn');
+const endTurnBtn = document.getElementById('endTurnBtn');
+const currentPlayerEl = document.getElementById('currentPlayer');
+const selectedCellEl = document.getElementById('selectedCell');
+const bankInfo = document.getElementById('bankInfo');
+const msgEl = document.getElementById('gameMsg');
 
-    let size = parseInt(sizeInput.value,10); // number of cells per side
-    let players = parseInt(playersInput.value,10);
+const WIDTH = 40, HEIGHT = 20; // plansza 40x20
+const CELL = Math.floor(canvas.width / WIDTH);
 
-    let grid = []; // each cell: {owner: 0..players (0=neutral), troops: int}
-    let cellSize = canvas.width / size;
-    let currentPlayer = 1;
-    let selected = null; // [r,c]
+let grid = []; // każda komórka: {land:0/1, owner:0/1/2, troops:int, base:false/true}
+let currentPlayer = 1;
+let coins = [0, 2, 2]; // coins[1] dla gracza 1, coins[2] dla gracza 2
+let selected = null; // [x,y]
+let basePos = [[-1,-1],[5,5],[34,15]]; // [niedziałający],[G1:Am.Płd],[G2:Australia]
+let winner = 0;
 
-    function makeEmptyGrid(n){
-      const g = [];
-      for(let r=0;r<n;r++){
-        const row = [];
-        for(let c=0;c<n;c++) row.push({owner:0,troops:0});
-        g.push(row);
-      }
-      return g;
+// uproszczona maska świata: 1 = ląd, 0 = ocean [40 szer x 20 wys]
+const worldMask = [
+"0000000000000000000000000000000000000000",
+"0000000011111100000000000001111111000000",
+"0000001111111111000000011111111111100000",
+"0000011111111111100001111111111111110000",
+"0000111111111111110011111111111111111000",
+"0001111111111111111111111111111111111100",
+"0001111111001111111111111111111111111100",
+"0011111110000111111111111111111111111110",
+"0111111000000111111111111111111111111111",
+"0111100000001111111111111111111111111111",
+"0111000000011111111111111111111111111111",
+"0111000001111111111111111111111111111111",
+"0111100011111111111111111111111111111100",
+"0111111111111111111111111111111111100000",
+"0011111111111111111111111111111100000000",
+"0001111111111111111111111111110000000000",
+"0000111111111111111111111111000000000000",
+"0000011111111111111111111100000000000000",
+"0000001111111111111111110000000000000000",
+"0000000111111111111110000000000000000000"
+];
+
+function createMap(){
+  let map = [];
+  for(let y=0; y<HEIGHT; y++){
+    let row = [];
+    for(let x=0; x<WIDTH; x++){
+      row.push(worldMask[y][x]==="1"?1:0);
     }
+    map.push(row);
+  }
+  return map;
+}
 
-    function placeStartingBases(){
-      // place one base per player near corners
-      const corners = [[0,0],[0,size-1],[size-1,0],[size-1,size-1],[0,Math.floor(size/2)],[Math.floor(size/2),0]];
-      for(let p=1;p<=players;p++){
-        const [r,c] = corners[p-1] || [Math.floor(Math.random()*size),Math.floor(Math.random()*size)];
-        grid[r][c].owner = p;
-        grid[r][c].troops = 3; // starting troops
-      }
+// reset gry
+function newGame(){
+  grid=[];
+  let map=createMap();
+  for(let y=0;y<HEIGHT;y++){
+    let row=[];
+    for(let x=0;x<WIDTH;x++){
+      row.push({
+        land: map[y][x],
+        owner: 0,
+        troops: 0,
+        base: false
+      });
     }
+    grid.push(row);
+  }
+  // ustaw bazy (tylko na lądach!)
+  grid[basePos[1][1]][basePos[1][0]].owner=1;
+  grid[basePos[1][1]][basePos[1][0]].base=true;
+  grid[basePos[2][1]][basePos[2][0]].owner=2;
+  grid[basePos[2][1]][basePos[2][0]].base=true;
+  // Każdy zaczyna z 0 żołnierzy na bazie
+  grid[basePos[1][1]][basePos[1][0]].troops=0;
+  grid[basePos[2][1]][basePos[2][0]].troops=0;
+  currentPlayer=1; coins=[0,2,2];
+  selected=null; winner=0;
+  draw();
+  msgEl.textContent="";
+}
 
-    function draw(){
-      cellSize = canvas.width / size;
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-      for(let r=0;r<size;r++){
-        for(let c=0;c<size;c++){
-          const cell = grid[r][c];
-          const x = c*cellSize, y = r*cellSize;
-          // color
-          if(cell.owner===0){
-            ctx.fillStyle = '#bbb';
-            ctx.fillRect(x,y,cellSize,cellSize);
-          } else if(cell.owner===1){
-            ctx.fillStyle = '#333';
-            ctx.fillRect(x,y,cellSize,cellSize);
-          } else if(cell.owner===2){
-            // white with border so visible
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(x,y,cellSize,cellSize);
-            ctx.strokeStyle = '#333';
-            ctx.strokeRect(x+0.5,y+0.5,cellSize-1,cellSize-1);
-          } else {
-            // other players: light gray shades
-            ctx.fillStyle = '#888';
-            ctx.fillRect(x,y,cellSize,cellSize);
-          }
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  for(let y=0;y<HEIGHT;y++){
+    for(let x=0;x<WIDTH;x++){
+      let cell=grid[y][x], xp=x*CELL, yp=y*CELL;
+      // ocean
+      if(!cell.land){
+        ctx.fillStyle='#bbb';
+        ctx.fillRect(xp,yp,CELL,CELL);
+      }
+      // ląd
+      else{
+        // pole neutralne
+        if(cell.owner===0) ctx.fillStyle='#f4f4f4';
+        // gracz 1
+        else if(cell.owner===1) ctx.fillStyle='#333';
+        // gracz 2
+        else ctx.fillStyle='#c11';
+        ctx.fillRect(xp,yp,CELL,CELL);
 
-          // selection highlight
-          if(selected && selected[0]===r && selected[1]===c){
-            ctx.strokeStyle = 'rgba(255,0,0,0.9)';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(x+2,y+2,cellSize-4,cellSize-4);
-            ctx.lineWidth = 1;
-          }
+        // zaznaczanie aktywne
+        if(selected && selected[0]===x && selected[1]===y){
+          ctx.strokeStyle='#08f'; ctx.lineWidth=3;
+          ctx.strokeRect(xp+2,yp+2,CELL-4,CELL-4);
+          ctx.lineWidth=1;
+        }
 
-          // draw troops number
-          ctx.fillStyle = (cell.owner===1? '#fff' : '#000');
-          if(cell.owner===0) ctx.fillStyle = '#222';
-          ctx.font = Math.max(12,cellSize*0.35)+'px sans-serif';
+        // BAZA
+        if(cell.base){
+          ctx.beginPath();
+          ctx.arc(xp+CELL/2, yp+CELL/2, CELL*0.38, 0, 2*Math.PI);
+          ctx.strokeStyle='#09f';
+          ctx.lineWidth=2.6;
+          ctx.stroke();
+          ctx.lineWidth=1;
+          ctx.fillStyle="#09f";
+          ctx.font = (CELL*0.63)+'px sans-serif';
           ctx.textAlign='center';
           ctx.textBaseline='middle';
-          if(cell.troops>0) ctx.fillText(cell.troops, x+cellSize/2, y+cellSize/2);
+          ctx.fillText('B', xp+CELL/2, yp+CELL/2);
+        }
 
-          // grid lines
-          ctx.strokeStyle = '#9a9a9a';
-          ctx.strokeRect(x+0.5,y+0.5,cellSize-1,cellSize-1);
+        // liczba żołnierzy
+        if(cell.troops>0){
+          ctx.fillStyle=(cell.owner===1?'#fff':'#fff');
+          ctx.font = (CELL*0.54)+'px sans-serif';
+          ctx.textAlign='right'; ctx.textBaseline='bottom';
+          ctx.fillText(cell.troops, xp+CELL-6, yp+CELL-4);
         }
       }
-      currentPlayerEl.textContent = currentPlayer;
-      selectedCellEl.textContent = selected ? selected.join(',') : 'brak';
+      // siatka
+      ctx.strokeStyle='#a9a9a9'; ctx.strokeRect(xp+0.5,yp+0.5,CELL-1,CELL-1);
     }
+  }
+  currentPlayerEl.textContent=currentPlayer;
+  selectedCellEl.textContent=selected?selected.join(','):'brak';
+  bankInfo.textContent="Monety: "+coins[currentPlayer];
+}
 
-    function inBounds(r,c){return r>=0&&c>=0&&r<size&&c<size}
+function inBounds(x,y){return x>=0&&y>=0&&x<WIDTH&&y<HEIGHT}
+function isNeighbor(x1,y1,x2,y2){
+  return (Math.abs(x1-x2)+Math.abs(y1-y2))===1;
+}
 
-    function neighbors(r,c){
-      return [[r-1,c],[r+1,c],[r,c-1],[r,c+1]].filter(([rr,cc])=>inBounds(rr,cc));
-    }
-
-    function canvasToCell(x,y){
-      const rect = canvas.getBoundingClientRect();
-      const cx = x - rect.left; const cy = y - rect.top;
-      const c = Math.floor(cx / cellSize); const r = Math.floor(cy / cellSize);
-      return [r,c];
-    }
-
-    canvas.addEventListener('click', (ev)=>{
-      const [r,c] = canvasToCell(ev.clientX, ev.clientY);
-      if(!inBounds(r,c)) return;
-      const cell = grid[r][c];
-
-      // if click on own cell -> select or quick recruit (double click simulated by two quick clicks?)
-      if(cell.owner === currentPlayer){
-        // if it's already selected -> recruit (add +1 troop)
-        if(selected && selected[0]===r && selected[1]===c){
-          cell.troops += 1; // recruit mechanic
-          draw();
-          return;
-        }
-        // else select
-        selected = [r,c];
-        draw();
-        return;
-      }
-
-      // if we have a selected own cell and click on neighbor -> attempt attack/move
-      if(selected){
-        const [sr,sc] = selected;
-        const src = grid[sr][sc];
-        // only adjacent moves allowed
-        const isNeighbor = neighbors(sr,sc).some(([nr,nc])=>nr===r && nc===c);
-        if(!isNeighbor){ selected = null; draw(); return; }
-        // cannot attack if no troops
-        if(src.troops<=0){ selected=null; draw(); return; }
-
-        // attack logic: attacker uses all troops except 1 must remain? For simplicity use all troops
-        const attackPower = src.troops;
-        const defPower = cell.troops;
-
-        if(attackPower > defPower){
-          // attacker wins, leftover troops go to captured cell
-          const leftover = attackPower - defPower;
-          grid[r][c].owner = currentPlayer;
-          grid[r][c].troops = leftover;
-          grid[sr][sc].troops = 0;
-        } else {
-          // defender survives, defender loses attackPower
-          grid[r][c].troops = Math.max(0, defPower - attackPower);
-          grid[sr][sc].troops = 0;
-          // ownership stays as was
-        }
-
-        selected = null;
-        draw();
-        return;
-      }
-    });
-
-    function nextPlayer(){
-      currentPlayer++;
-      if(currentPlayer>players) currentPlayer=1;
-      // simple passive income: each owned cell +1 troop at start of player's turn
-      for(let r=0;r<size;r++){
-        for(let c=0;c<size;c++){
-          if(grid[r][c].owner===currentPlayer) grid[r][c].troops += 1;
-        }
+canvas.addEventListener('click', e=>{
+  if(winner) return;
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  const x=Math.floor(mx/CELL), y=Math.floor(my/CELL);
+  if(!inBounds(x,y))return;
+  const cell=grid[y][x];
+  // ocean
+  if(!cell.land) return;
+  // kliknij własne pole -> rekrutacja jeśli masz monetę
+  if(cell.owner===currentPlayer){
+    // kliknij już zaznaczone pole = rekrutuj
+    if(selected && selected[0]===x && selected[1]===y){
+      if(coins[currentPlayer]>0){
+        cell.troops++;
+        coins[currentPlayer]--;
+      }else{
+        msgEl.textContent="Za mało monet!";
+        setTimeout(()=>msgEl.textContent="",1000);
       }
       draw();
+      return;
     }
-
-    endTurnBtn.addEventListener('click', ()=>{
-      nextPlayer();
-    });
-
-    newBtn.addEventListener('click', ()=>{
-      size = parseInt(sizeInput.value,10)||20;
-      players = Math.max(2,Math.min(6,parseInt(playersInput.value,10)||2));
-      canvas.width = Math.min(800, Math.max(300, size*30));
-      canvas.height = canvas.width;
-      grid = makeEmptyGrid(size);
-      placeStartingBases();
-      currentPlayer = 1;
-      selected = null;
-      draw();
-    });
-
-    // initialize
-    grid = makeEmptyGrid(size);
-    placeStartingBases();
+    // wybierz pole do ataku
+    selected=[x,y];
     draw();
+    return;
+  }
+  // atak
+  if(selected){
+    const [sx,sy]=selected;
+    const from=grid[sy][sx], to=cell;
+    // musi być sąsiad
+    if(!isNeighbor(sx,sy,x,y)){selected=null;draw();return;}
+    // nie można atakować oceanu
+    if(!to.land){selected=null;draw();return;}
+    // musisz mieć żołnierzy
+    if(from.troops<1){selected=null;draw();return;}
+    // atak — jeśli masz więcej żołnierzy niż obrona
+    if(from.troops>to.troops){
+      let left=from.troops-to.troops;
+      // przejmij pole
+      to.owner=currentPlayer;
+      to.troops=left;
+      // baza wroga przejęta? KONIEC
+      if(to.base && to.owner===currentPlayer){
+        winner=currentPlayer;
+        msgEl.textContent="Gracz "+currentPlayer+" przejął bazę wroga! WYGRYWA!";
+      }
+      from.troops=0;
+    }else{
+      // atak nieudany, tracisz żołnierzy
+      to.troops=Math.max(0,to.troops-from.troops);
+      from.troops=0;
+    }
+    selected=null; draw();
+    // sprawdź czy wygrał przez przewagę terytorium
+    setTimeout(checkWin,100);
+    return;
+  }
+});
 
-    // keyboard shortcuts
-    window.addEventListener('keydown',(e)=>{
-      if(e.key==='n') newBtn.click();
-      if(e.key===' ') { e.preventDefault(); endTurnBtn.click(); }
-    });
+function endTurn(){
+  if(winner) return;
+  currentPlayer = currentPlayer===1?2:1;
+  coins[currentPlayer]+=2; // +2 monety na turę
+  draw();
+  msgEl.textContent="";
+}
+endTurnBtn.onclick=endTurn;
+newBtn.onclick=newGame;
 
-  </script>
+function checkWin(){
+  // wygrywa gracz który przejął bazę wroga (już obsłużone) albo kontroluje > połowę lądów
+  let cnt=[0,0,0], land=0;
+  for(let y=0;y<HEIGHT;y++)for(let x=0;x<WIDTH;x++)
+    if(grid[y][x].land){land++; if(grid[y][x].owner)cnt[grid[y][x].owner]++;}
+  if(cnt[1]>land/2){
+    winner=1;msgEl.textContent="Gracz 1 kontroluje świat! WYGRYWA!";
+  }
+  if(cnt[2]>land/2){
+    winner=2;msgEl.textContent="Gracz 2 kontroluje świat! WYGRYWA!";
+  }
+}
+
+newGame();
+
+window.addEventListener('keydown',(e)=>{
+  if(e.key==='n') newGame();
+  if(e.key===' '){ e.preventDefault(); endTurn();}
+});
+</script>
 </body>
 </html>
